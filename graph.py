@@ -167,14 +167,26 @@ class CustomChartView(QChartView):
         """
         Zooming or out is just about changing the range displayed on the x-axis.
         This is done by changing the min and max values of the x-axis based on the mouse wheel event.
+        We find the center of the current range by adding min and max value then divide it by 2 , take the interger part
+        If it is zooming in, we set new duration by half of current duration and vice versa
+        Finally, we set new min and max value of x-axis range calculated by addition and minus its current center by half of new duration
         """
-        zoom_factor = 1.2
         if event.angleDelta().y() < 0:
-            zoom_factor = 1 / zoom_factor
-            self._chartPressure.zoom(zoom_factor)
+            min_time = self._x_axis.min()
+            max_time = self._x_axis.max()
+            duration = min_time.msecsTo(max_time)
+            center = min_time.addMSecs(duration // 2)
+            new_duration = duration * 2
+            self._x_axis.setMin(center.addMSecs(-int(new_duration // 2)))
+            self._x_axis.setMax(center.addMSecs(int(new_duration // 2)))
         else:
-            zoom_factor = zoom_factor
-            self._chartPressure.zoom(zoom_factor)
+            min_time = self._x_axis.min()
+            max_time = self._x_axis.max()
+            duration = min_time.msecsTo(max_time)
+            center = min_time.addMSecs(duration // 2)
+            new_duration = duration * 0.5
+            self._x_axis.setMin(center.addMSecs(-int(new_duration // 2)))
+            self._x_axis.setMax(center.addMSecs(int(new_duration // 2)))
         super().wheelEvent(event)
     
     def mousePressEvent(self, event):
@@ -250,6 +262,8 @@ class CustomChartView(QChartView):
             self._x_axis.setMin(max(timestamp.addSecs(-10),self.time_since_start))
             self._x_axis.setMax(max(timestamp, self.time_since_start.addSecs(10)))
         self._supplyPressureLineSeries.append(timestamp.toMSecsSinceEpoch(), value)
+        if not self._cursorEnabled:
+            self.SupplyPressureCursorSignal.emit("supply",value)
 
     @Slot(QDateTime, float) 
     def add_output_pressure_data(self, timestamp: QDateTime, value: float):
@@ -264,6 +278,8 @@ class CustomChartView(QChartView):
             self._x_axis.setMin(max(timestamp.addSecs(-10),self.time_since_start))
             self._x_axis.setMax(max(timestamp, self.time_since_start.addSecs(10)))
         self._outputPressureSeries.append(timestamp.toMSecsSinceEpoch(), value)
+        if not self._cursorEnabled:
+            self.OutputPressureCursorSignal.emit("output",value)
 
     @Slot(QDateTime, float)
     def add_target_pressure_data(self, timestamp: QDateTime, value: float):
@@ -278,6 +294,8 @@ class CustomChartView(QChartView):
             self._x_axis.setMin(max(timestamp.addSecs(-10),self.time_since_start))
             self._x_axis.setMax(max(timestamp, self.time_since_start.addSecs(10)))
         self._targetPressureSeries.append(timestamp.toMSecsSinceEpoch(), value)
+        if not self._cursorEnabled:
+            self.TargetPressureCursorSignal.emit("target",value)
 
     @Slot()
     def hold_chart(self):
@@ -346,7 +364,7 @@ class GraphDialog(QDialog):
                  min_y_range: float = 0.0,
                  max_y_range: float = 100.0):
         super().__init__()
-
+        self._logSaving = False
         self._chartFreeze = False
         """ Initialize the dialog window with a title and layout. """
         self.layout = QVBoxLayout(self)
@@ -381,6 +399,11 @@ class GraphDialog(QDialog):
         # Add a button to resume the chart
         self._resumeButton = QPushButton("Resume",self)
         self._resumeButton.clicked.connect(self._chartView.resume_chart)
+
+        # Add a button to saving log
+        self._logSavingButton = QPushButton("Save",self)
+        self._logSavingButton.clicked.connect(self.log_saving)
+
         # Add a checkbox to toggle sampling
         self._samplingCheckBox = QCheckBox("Sampling",self)
         self._samplingCheckBox.stateChanged.connect(self._chartView.toggle_sampling)
@@ -401,6 +424,7 @@ class GraphDialog(QDialog):
       # Add the buttons and checkbox to the layout
         self._controlLayout.addWidget(self._holdButton, 0, 0, 1, 2)
         self._controlLayout.addWidget(self._resumeButton, 0, 2, 1, 2)
+        self._controlLayout.addWidget(self._logSavingButton, 0, 4, 1, 2)
         self._controlLayout.addWidget(self._outputPressureLabel, 1, 0, 1, 2)
         self._controlLayout.addWidget(self._targetPressureLabel, 1, 2, 1, 2)
         self._controlLayout.addWidget(self._supplyPressureLabel, 1, 4, 1, 2)
@@ -413,6 +437,10 @@ class GraphDialog(QDialog):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_data)
         self.timer.start(1000)
+    @Slot()
+    def log_saving(self):
+        self._logSaving = not self._logSaving
+        self._logSavingButton.setText("Saving..." if self._logSaving else "Save")
 
     @Slot(str,float)
     def display_pressure_data(self,name:str, value: float):
@@ -421,11 +449,26 @@ class GraphDialog(QDialog):
         """
         print(f"name: {name}, value: {value}")
         if name == "supply":
-            self._supplyPressureLabel.setText(f"Supply Pressure: {value} mbar")
+            self._supplyPressureLabel.setText(f"Supply Pressure: {format(value,".2f")} mbar")
         elif name == "output":
-            self._outputPressureLabel.setText(f"Output Pressure: {value} mbar")
+            self._outputPressureLabel.setText(f"Output Pressure: {format(value,".2f")} mbar")
         elif name == "target":
-            self._targetPressureLabel.setText(f"Target Pressure: {value} mbar")
+            self._targetPressureLabel.setText(f"Target Pressure: {format(value,".2f")} mbar")
+
+    @Slot(QDateTime,float,float,float)
+    def pressure_update(self, now: QDateTime,
+                        supply_pressure : float, 
+                        target_pressure : float , 
+                        output_pressure : float ):
+        """
+        This slot is used to update pressure data in official version
+        It shall be connected to graph_manager.py which shall feed the real time data for each node corresponding to its graph diaglog
+        """
+        self._chartView.add_supply_pressure_data(now, supply_pressure)
+        self._chartView.add_output_pressure_data(now, output_pressure)
+        self._chartView.add_output_pressure_data(now, target_pressure)
+        if self._logSaving:
+            ...
 
     @Slot()
     def update_data(self):
@@ -433,14 +476,13 @@ class GraphDialog(QDialog):
         # this slot will be connected to a graph manager that will update the chart with new data
         global ser
         now = QDateTime.currentDateTime()
-        if ser.in_waiting > 0:
+        if ser.in_waiting >= 8:
+            import struct
             byte = ser.read(8)
-            supply_pressure = byte[0] << 24 | byte[1] << 16 | byte[2] << 8 | byte[3]
-            output_pressure = byte[4] << 24 | byte[5] << 16 | byte[6] << 8 | byte[7]
-            self._chartView.add_supply_pressure_data(now, supply_pressure)
-            self._chartView.add_output_pressure_data(now, output_pressure)
+            self._chartView.add_supply_pressure_data(now, struct.unpack('<f', byte[:4])[0])
+            self._chartView.add_output_pressure_data(now, struct.unpack('<f', byte[4:8])[0])
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    dialog = GraphDialog("Pressure Monitoring Chart Node", "Time", "Value" ,"s", "mbar",0.0,14000.0)
+    dialog = GraphDialog("Pressure Monitoring Chart Node", "Time", "Pressure" ,"s", "mbar",0.0,14000.0)
     dialog.exec()
