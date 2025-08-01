@@ -449,7 +449,7 @@ class GraphDialog(QDialog):
     def save_logging_data(self) -> None:
         try:
             print(f'Graph {self.graph_name} saved')
-            with open(f"{self.graph_name}",'a') as csvfile:
+            with open(f"{self.graph_name}.csv",'a') as csvfile:
                 csv_writer = csv.writer(csvfile)
                 csv_writer.writerows(self._logdata)
             self._logdata.clear()
