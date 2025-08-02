@@ -10,6 +10,7 @@ from PySide6.QtGui import (QPainter, QPen, QColor,QFont,QLinearGradient)
 from PySide6.QtCore import (Qt, QDateTime, Slot,QTimer, 
                             Signal)
 import csv
+import style_sheet
 
 class CustomChartView(QChartView):
     """
@@ -65,7 +66,7 @@ class CustomChartView(QChartView):
         self._chartPressure.setPlotAreaBackgroundVisible(True)
         legend = self._chartPressure.legend()
         legend.setLabelColor(QColor("white"))
-        
+
         for axis in self._chartPressure.axes():
             axis.setLabelsBrush(QColor("white"))
             axis.setTitleBrush(QColor("white"))
@@ -374,45 +375,7 @@ class GraphDialog(QDialog):
                  parent = None):
         
         super().__init__(parent)
-        self.setStyleSheet("""
-        QDialog {
-            background: #1f1f29;
-            color: #e8e8f2;
-            font-family: "Segoe UI", system-ui;
-        }
-        QPushButton {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #5a9cff, stop:1 #3f6fc2);
-            border: none;
-            border-radius: 6px;
-            padding: 6px 12px;
-            color: white;
-            font-weight: 600;
-        }
-        QPushButton:pressed { background: #2f5fb8; }
-        QCheckBox { padding: 2px; }
-        QLabel { font-size: 12px; }
-        QLabel, QCheckBox {
-            color: white;
-            font-size: 12px;
-        }
-        QCheckBox::indicator {
-            width: 16px;
-            height: 16px;
-            border: 1px solid #777;
-            border-radius: 4px;
-            background: #2b2b3a;
-        }
-
-        /* Checked state: bright background so the check is visible */
-        QCheckBox::indicator:checked {
-            background: #5a9cff;
-            border: 1px solid #5a9cff;
-        }
-        QChartView {
-            background: transparent;
-            border: none;
-        }
-        """)
+        self.setStyleSheet(style_sheet.graph_dialog_style_sheet)
         self._logdata = list()
         self._logSaving = False
         self._chartFreeze = False
@@ -539,7 +502,6 @@ class GraphDialog(QDialog):
 
     def save_logging_data(self) -> None:
         try:
-            print(f'Graph {self.graph_name} saved')
             with open(f"{self.graph_name}.csv",'a') as csvfile:
                 csv_writer = csv.writer(csvfile)
                 csv_writer.writerows(self._logdata)
