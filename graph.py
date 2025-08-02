@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (QDialog, QApplication, QVBoxLayout,
 from PySide6.QtCharts import (QChart, QLineSeries, QChartView,
                               QValueAxis, QDateTimeAxis)
 
-from PySide6.QtGui import (QPainter, QPen, QColor)
+from PySide6.QtGui import (QPainter, QPen, QColor,QFont,QLinearGradient)
 
 from PySide6.QtCore import (Qt, QDateTime, Slot,QTimer, 
                             Signal)
@@ -30,7 +30,7 @@ class CustomChartView(QChartView):
                  max_y_range: float = 100.0,
                  parent=None):
         
-        
+        self._firstTimeInsertData = True
         self._chartFreeze = False
         """
         Set the maximum range of y-axis to be displayed on the chart.
@@ -52,6 +52,29 @@ class CustomChartView(QChartView):
         """
         self._chartPressure = QChart()
         self._chartPressure.setTitle(graph_name)
+        self._chartPressure.setTitleBrush(QColor("white"))   # set text color
+        self._chartPressure.setTitleFont(QFont("Segoe UI", 9, QFont.Bold))
+        self._chartPressure.setBackgroundBrush(QColor(30, 31, 41))  # dark slate
+
+        # Plot area background (behind the series)
+        gradient = QLinearGradient(0, 0, 0, 1)
+        gradient.setCoordinateMode(QLinearGradient.ObjectBoundingMode)
+        gradient.setColorAt(0.0, QColor(25, 26, 36))
+        gradient.setColorAt(1.0, QColor(35, 36, 50))
+        self._chartPressure.setPlotAreaBackgroundBrush(gradient)
+        self._chartPressure.setPlotAreaBackgroundVisible(True)
+        legend = self._chartPressure.legend()
+        legend.setLabelColor(QColor("white"))
+        
+        for axis in self._chartPressure.axes():
+            axis.setLabelsBrush(QColor("white"))
+            axis.setTitleBrush(QColor("white"))
+            axis.setGridLineVisible(True)
+            # Optional: lighter grid lines
+            if hasattr(axis, "setGridLineColor"):
+                axis.setGridLineColor(QColor(80, 80, 100))
+            # Tick lines etc.
+            axis.setLabelsFont(QFont("Segoe UI", 9))
 
         super().__init__(self._chartPressure, parent)
 
@@ -103,7 +126,10 @@ class CustomChartView(QChartView):
         self._chartPressure.addSeries(self._supplyPressureLineSeries)
         self._chartPressure.addSeries(self._outputPressureSeries)
         self._chartPressure.addSeries(self._targetPressureSeries)
-
+        
+        self._supplyPressureLineSeries.setPen(QPen(QColor("#FFFF00"), 2))     # light cyan
+        self._outputPressureSeries.setPen(QPen(QColor("#1E90FF"), 2))     # amber
+        self._targetPressureSeries.setPen(QPen(QColor("#50fa7b"), 2))
         # Add axis labels to the chart
         """
         Create x-axis and y-axis for the chart.
@@ -133,6 +159,16 @@ class CustomChartView(QChartView):
         # 0 - 10, 10 - 20, 20 - 30, 30 - 40, 40 - 50, 50 - 60, 60 - 70, 70 - 80, 80 - 90, 90 - 100
         self._y_axis.setRange(min_y_range, max_y_range)
 
+        white = QColor("white")
+        self._x_axis.setLabelsBrush(white)
+        self._x_axis.setTitleBrush(white)
+        self._x_axis.setLabelsFont(QFont("Segoe UI", 9))
+        self._x_axis.setTitleFont(QFont("Segoe UI", 10, QFont.Bold))
+
+        self._y_axis.setLabelsBrush(white)
+        self._y_axis.setTitleBrush(white)
+        self._y_axis.setLabelsFont(QFont("Segoe UI", 9))
+        self._y_axis.setTitleFont(QFont("Segoe UI", 10, QFont.Bold))
         # Add x-axis to the chart
         self._chartPressure.addAxis(self._x_axis, Qt.AlignBottom)
 
@@ -260,6 +296,10 @@ class CustomChartView(QChartView):
         Add a new data point to the supply pressure series.
         This is also a slot that can be connected to a signal to update the series with new data.
         """
+        if self._firstTimeInsertData:
+            self._x_axis.setMin(timestamp)
+            self._x_axis.setMax(timestamp.addSecs(30))
+            self._firstTimeInsertData = False
         self._supplyPressureLineSeries.append(timestamp.toMSecsSinceEpoch(), value)
         if not self._cursorEnabled:
             self.SupplyPressureCursorSignal.emit("supply",value)
@@ -270,6 +310,10 @@ class CustomChartView(QChartView):
         Add a new data point to the output pressure series.
         This is also a slot that can be connected to a signal to update the series with new data.
         """
+        if self._firstTimeInsertData:
+            self._x_axis.setMin(timestamp)
+            self._x_axis.setMax(timestamp.addSecs(30))
+            self._firstTimeInsertData = False
         self._outputPressureSeries.append(timestamp.toMSecsSinceEpoch(), value)
         if not self._cursorEnabled:
             self.OutputPressureCursorSignal.emit("output",value)
@@ -280,6 +324,10 @@ class CustomChartView(QChartView):
         Add a new data point to the target pressure series.
         This is also a slot that can be connected to a signal to update the series with new data.
         """
+        if self._firstTimeInsertData:
+            self._x_axis.setMin(timestamp)
+            self._x_axis.setMax(timestamp.addSecs(30))
+            self._firstTimeInsertData = False
         self._targetPressureSeries.append(timestamp.toMSecsSinceEpoch(), value)
         if not self._cursorEnabled:
             self.TargetPressureCursorSignal.emit("target",value)
@@ -326,6 +374,45 @@ class GraphDialog(QDialog):
                  parent = None):
         
         super().__init__(parent)
+        self.setStyleSheet("""
+        QDialog {
+            background: #1f1f29;
+            color: #e8e8f2;
+            font-family: "Segoe UI", system-ui;
+        }
+        QPushButton {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #5a9cff, stop:1 #3f6fc2);
+            border: none;
+            border-radius: 6px;
+            padding: 6px 12px;
+            color: white;
+            font-weight: 600;
+        }
+        QPushButton:pressed { background: #2f5fb8; }
+        QCheckBox { padding: 2px; }
+        QLabel { font-size: 12px; }
+        QLabel, QCheckBox {
+            color: white;
+            font-size: 12px;
+        }
+        QCheckBox::indicator {
+            width: 16px;
+            height: 16px;
+            border: 1px solid #777;
+            border-radius: 4px;
+            background: #2b2b3a;
+        }
+
+        /* Checked state: bright background so the check is visible */
+        QCheckBox::indicator:checked {
+            background: #5a9cff;
+            border: 1px solid #5a9cff;
+        }
+        QChartView {
+            background: transparent;
+            border: none;
+        }
+        """)
         self._logdata = list()
         self._logSaving = False
         self._chartFreeze = False
@@ -376,6 +463,10 @@ class GraphDialog(QDialog):
         self._targetPressureLabel.setText("Target Pressure: n/a mbar")
         self._supplyPressureLabel = QLabel("Supply Pressure: ",self)
         self._supplyPressureLabel.setText("Supply Pressure: n/a mbar")
+
+        self._supplyPressureLabel.setStyleSheet(f"color: {self._chartView._supplyPressureLineSeries.pen().color().name()};")
+        self._outputPressureLabel.setStyleSheet(f"color: {self._chartView._outputPressureSeries.pen().color().name()};")
+        self._targetPressureLabel.setStyleSheet(f"color: {self._chartView._targetPressureSeries.pen().color().name()};")
       # Add the buttons and checkbox to the layout
         self._controlLayout.addWidget(self._outputPressureLabel, 0, 0, 1, 2)
         self._controlLayout.addWidget(self._targetPressureLabel, 0, 2, 1, 2)
