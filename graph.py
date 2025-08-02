@@ -190,6 +190,7 @@ class CustomChartView(QChartView):
 
         self.setRenderHints(QPainter.Antialiasing)
 
+
     def find_closest_point(self, x , series: QLineSeries) -> int:
         """
         Find the closest point in the series to the given x-coordinate.
@@ -375,6 +376,7 @@ class GraphDialog(QDialog):
                  parent = None):
         
         super().__init__(parent)
+        self._node_available = False
         self.setStyleSheet(style_sheet.graph_dialog_style_sheet)
         self._logdata = list()
         self._logSaving = False
@@ -477,26 +479,33 @@ class GraphDialog(QDialog):
             self._targetPressureLabel.setText(f"Target Pressure: {format(value,".2f")} mbar")
 
     @Slot(QDateTime,float,float,float)
-    def pressure_update(self,id: int, now: QDateTime,
+    def pressure_update(self,id_: int, now: QDateTime,
                         supply_pressure : float, 
-                        target_pressure : float , 
+                        target_pressure : float, 
                         output_pressure : float ) -> None:
         """
         This slot is used to update pressure data in official version
         It shall be connected to graph_manager.py which shall feed the real time data for each node corresponding to its graph diaglog
         If saving is enabled, it shall automatically save to a file after 1000 samples to reduce number of time we have to open/close 
         the file for saving workload purpose
+        If pressure value is less than 0 then this value has no update
         """
-        if self._graph_id != id:
+        if self._graph_id != id_:
             return
-        self._chartView.add_supply_pressure_data(now, supply_pressure)
-        self._chartView.add_output_pressure_data(now, output_pressure)
-        self._chartView.add_target_pressure_data(now, target_pressure)
+        if supply_pressure >= 0.0 and self._node_available:
+            self._chartView.add_supply_pressure_data(now, supply_pressure)
+        if output_pressure >= 0.0:
+            self._chartView.add_output_pressure_data(now, output_pressure)
+            self._node_available = True
+        if target_pressure >= 0.0 and self._node_available:
+            self._chartView.add_target_pressure_data(now, target_pressure)
+        
+
         if self._logSaving:
             self._logdata.append([now.toString(),
                         str(format(supply_pressure,".2f")),
                         str(format(output_pressure,".2f")),
-                        str(format(output_pressure,".2f"))])
+                        str(format(target_pressure,".2f"))])
             if len(self._logdata) >= 1000:
                 self.save_logging_data()
 

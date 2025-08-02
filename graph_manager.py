@@ -33,11 +33,11 @@ class GraphManager(QObject):
             graph.onGraphDialogCloseSignal.connect(self.onGraphDiaglogClose)
         ...
 
-    def pressureInformationUpdate(self,id : int, now : QDateTime, supply_pressure : float, target_pressure : float, output_pressure : float) -> None:
+    def pressureInformationUpdate(self,id_ : int, now : QDateTime, supply_pressure : float, target_pressure : float, output_pressure : float) -> None:
         """
         Forward pressure data to corresponding graph based on graph id
         """
-        self.updatePressureDataBasedOnIDSignal.emit(id,now,supply_pressure,target_pressure,output_pressure)
+        self.updatePressureDataBasedOnIDSignal.emit(id_,now,supply_pressure,target_pressure,output_pressure)
         ...
     
     def showGraphBasedOnID(self,id : int) -> None:

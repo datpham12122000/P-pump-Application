@@ -22,6 +22,7 @@ import serial
 import serial.tools.list_ports as list_ports
 import struct
 import style_sheet
+import protocol_parser
 
 
 class MainWindow(QMainWindow):
@@ -31,7 +32,7 @@ class MainWindow(QMainWindow):
         
         super().__init__()
         self.setStyleSheet(style_sheet.main_window)
-
+        self._targetPressureList = {}
         self.serialPort = None
         self.setWindowTitle("Pressure Monitoring Tool")
         self.setGeometry(100, 100, 400, 300)
@@ -45,7 +46,6 @@ class MainWindow(QMainWindow):
         layout = QGridLayout()
         central_widget.setLayout(layout)
         
-
         self._showGraphButton = QPushButton("📈 Show Graph",self)
         self._showGraphButton.clicked.connect(self.onShowGraphButtonClicked)
 
@@ -56,7 +56,6 @@ class MainWindow(QMainWindow):
 
         self._targetPressureLineEdit = QLineEdit(self)
         self._targetPressureLabel = QPushButton("Target (mbar)")
-        # self._targetPressureLabel.setAlignment(Qt.AlignCenter)  # center text inside label
         self._targetNodeComboBox = QComboBox(self)
         self._targetSetButton = QPushButton("🎯 Set Target")
         self._targetSetButton.clicked.connect(self.onTargetButton)
@@ -81,81 +80,116 @@ class MainWindow(QMainWindow):
         layout.setVerticalSpacing(10)
         layout.setContentsMargins(12, 12, 12, 12)
 
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_data)
-        self.timer.start(100)
+        self._collectDataTimer = QTimer(self)
+        self._collectDataTimer.timeout.connect(self.update_data)
+        self._collectDataTimer.start(100)
 
     def update_data(self):
+        """
+        Update status on graph with the serial data available
+        """
         if self.serialPort == None:
             return
         now = QDateTime.currentDateTime()
-        if self.serialPort.in_waiting >= 8:
-            import struct
-            byte = self.serialPort.read(8)
-            supply_pressure = struct.unpack('<f', byte[:4])[0]
-            output_pressure = struct.unpack('<f', byte[4:8])[0]
-            self._graphManager.pressureInformationUpdate(1,now,supply_pressure,output_pressure,output_pressure)
-            self._graphManager.pressureInformationUpdate(2,now,supply_pressure,output_pressure,output_pressure)
-            self._graphManager.pressureInformationUpdate(3,now,supply_pressure,output_pressure,output_pressure)
-            self._graphManager.pressureInformationUpdate(4,now,supply_pressure,output_pressure,output_pressure)
+        if self.serialPort.in_waiting >= protocol_parser.default_frame_length:
+            byte = self.serialPort.read(protocol_parser.default_frame_length)
+            frame_information = protocol_parser.get_data_from_frame(byte)
+            if frame_information[0] == "AtmospherePressure":
+                ...
+            elif frame_information[0] == "SupplyPressure":
+                for i in range (1,17):
+                    self._graphManager.pressureInformationUpdate(i,now,frame_information[1],-1.0,-1.0)
+            elif frame_information[0] == "NodePressure":
+                self._graphManager.pressureInformationUpdate(frame_information[1],now,-1.0,-1.0,frame_information[2])
 
     def onShowGraphButtonClicked(self):
-        if self._selectedGraphCombobox.currentIndex() + 1 == 17:
+        """
+        Displaying graph based on index of selected graph combobox
+        """
+        if self._selectedGraphCombobox.currentIndex() + 1 == self._selectedGraphCombobox.count():
             for i in range (1,17):
                 self._graphManager.showGraphBasedOnID(i)
         else:
             self._graphManager.showGraphBasedOnID(self._selectedGraphCombobox.currentIndex() + 1)
     
     def onListSerialPort(self):
+        """
+        List all available COM port on a combobox
+        """
         self._serialCombobox.clear()
-
         ports = list_ports.comports()
         if not ports:
             self._serialCombobox.addItem("No serial ports found")
             self._serialCombobox.setEnabled(False)
             return
-
         self._serialCombobox.setEnabled(True)
         for port in ports:
             desc = f"{port.device} - {port.description}"
             self._serialCombobox.addItem(desc, userData=port.device)
 
     def onConnectSerial(self):
-        self.serialPort = serial.Serial(f"{self._serialCombobox.currentText()[:4]}",115200, timeout=1)
+        """
+        Connect to a serial port selected
+        """
+        if self._connectButton.text() == "🔌 Connect":
+            try:
+                self.serialPort = serial.Serial(f"{self._serialCombobox.currentText()[:4]}",115200, timeout=1)
+                self._connectButton.setText("❌ Disconnect")
+            except Exception as e:
+                return
+            self._connectButton.setText("❌ Disconnect")
+        else:
+            self._connectButton.setText("🔌 Connect")
+            self.serialPort.flush()
+            self.serialPort.close()
+            self.serialPort = None
+            self._targetPressureList.clear()
 
     def onTargetButton(self):
+        """
+        Send corresponding command to controller to set target pressure to a node
+        """
         try:
-            target_pressure = struct.pack('<f', float(self._targetPressureLineEdit.text()))
             if self.serialPort is not None:
-                self.serialPort.write(target_pressure)
+                node_id = self._targetNodeComboBox.currentIndex() + 1
+                target_pressure = float(self._targetPressureLineEdit.text())
+                self._targetPressureList[node_id] = target_pressure
+                command = protocol_parser.set_target_pressure(target_pressure,node_id)
+                self.serialPort.write(command)
+                self._graphManager.pressureInformationUpdate(node_id,QDateTime.currentDateTime(),-1.0,target_pressure,-1.0)
                 self.serialPort.flush()
-                print(f"Sent {len(target_pressure)} bytes: {target_pressure.hex()}")
+                print(command.hex())
         except Exception as e:
             print(e)
+
     def onOpenLog(self):
+        """
+        Open a csv file that contain pressure data recorded 
+        from previous measurement and display it on a graph
+        """
         file_name, _ = QFileDialog.getOpenFileName(
         self,
         "Open Log File",
-        "",                          # start directory
-        "CSV Files (*.csv);;All Files (*)"
-    )
+        "",
+        "CSV Files (*.csv);;All Files (*)")
         if file_name:
             self._logPlayingDialog = GraphDialog(f"{file_name}",0,"Time","Pressure","s","mbar",0.0,14000.0)
             fieldnames = ["timestamp", "supply_pressure", "output_pressure", "target_pressure"]
             with open(file_name, "r") as csv_file:
                 reader = csv.DictReader(csv_file, fieldnames=fieldnames)
-                for row_idx, row in enumerate(reader, start=1):
+                for _, row in enumerate(reader, start=1):
                     timestamp_str = row["timestamp"]
                     supply_s = row["supply_pressure"]
                     output_s = row["output_pressure"]
                     target_s = row["target_pressure"]
                     self._logPlayingDialog.pressure_update(0,QDateTime.fromString(timestamp_str),
                                                            float(supply_s),
-                                                           float(output_s),
-                                                           float(target_s))
+                                                           float(target_s),
+                                                           float(output_s))
             self._logPlayingDialog.exec()
 
     def contextMenuEvent(self, event):
+
         menu = QMenu(self)  # optional base
         refresh_action = QAction("🔄 Refresh Serial Ports", self)
         refresh_action.triggered.connect(self.onListSerialPort)
