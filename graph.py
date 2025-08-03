@@ -433,9 +433,9 @@ class GraphDialog(QDialog):
         self._outputPressureLabel.setStyleSheet(f"color: {self._chartView._outputPressureSeries.pen().color().name()};")
         self._targetPressureLabel.setStyleSheet(f"color: {self._chartView._targetPressureSeries.pen().color().name()};")
       # Add the buttons and checkbox to the layout
-        self._controlLayout.addWidget(self._outputPressureLabel, 0, 0, 1, 2)
-        self._controlLayout.addWidget(self._targetPressureLabel, 0, 2, 1, 2)
-        self._controlLayout.addWidget(self._supplyPressureLabel, 0, 4, 1, 2)
+        self._controlLayout.addWidget(self._outputPressureLabel, 0, 2, 1, 2)
+        self._controlLayout.addWidget(self._targetPressureLabel, 0, 4, 1, 2)
+        self._controlLayout.addWidget(self._supplyPressureLabel, 0, 0, 1, 2)
         self._controlLayout.addWidget(self._samplingCheckBox, 1, 0, 1, 2)
         self._controlLayout.addWidget(self._cursorCheckBox, 1, 2, 1, 2)
         self._controlLayout.addWidget(self._logSavingButton, 1, 4, 1, 2)
