@@ -10,7 +10,8 @@ from PySide6.QtWidgets import (QDialog,
                                QLineEdit,
                                QMainWindow,
                                QWidget,QMenu,
-                               QFileDialog
+                               QFileDialog,
+                               QMessageBox
                                )
 from PySide6.QtCharts import (QChart, QLineSeries, QChartView,QValueAxis, QDateTimeAxis)
 from PySide6.QtGui import (QAction)
@@ -32,7 +33,6 @@ class MainWindow(QMainWindow):
         
         super().__init__()
         self.setStyleSheet(style_sheet.main_window)
-        self._targetPressureList = {}
         self.serialPort = None
         self.setWindowTitle("Pressure Monitoring Tool")
         self.setGeometry(100, 100, 400, 300)
@@ -56,6 +56,7 @@ class MainWindow(QMainWindow):
 
         self._targetPressureLineEdit = QLineEdit(self)
         self._targetPressureLabel = QPushButton("Target (mbar)")
+        self._targetPressureLabel.setEnabled(False)
         self._targetNodeComboBox = QComboBox(self)
         self._targetSetButton = QPushButton("🎯 Set Target")
         self._targetSetButton.clicked.connect(self.onTargetButton)
@@ -65,16 +66,24 @@ class MainWindow(QMainWindow):
             self._targetNodeComboBox.addItem(f"Node {i}")
         self._selectedGraphCombobox.addItem(f"All Graph")
         self._serialCombobox = QComboBox(self)
+# raw send widgets
+        self._rawLineEdit = QLineEdit(self)
+        self._rawLineEdit.setPlaceholderText("Enter raw hex, e.g. DE AD BE EF")
+        self._sendRawButton = QPushButton("Send Raw", self)
+        self._sendRawButton.clicked.connect(self.onSendRaw)
+        self._sendRawButton.setEnabled(False)
 
-        layout.addWidget(self._showGraphButton,0,0,1,3)
-        layout.addWidget(self._selectedGraphCombobox,0,3,1,3)
-        layout.addWidget(self._serialCombobox,1,3,1,3)
-        layout.addWidget(self._connectButton,1,0,1,3)
-
-        layout.addWidget(self._targetPressureLabel,2,0,1,3)
-        layout.addWidget(self._targetPressureLineEdit,2,3,1,3)
-        layout.addWidget(self._targetNodeComboBox,3,3,1,3)
-        layout.addWidget(self._targetSetButton,3,0,1,3)
+        # place them at the bottom row (adjust row index to be below existing content)
+        layout.addWidget(self._showGraphButton,0,0,1,2)
+        layout.addWidget(self._selectedGraphCombobox,0,2,1,4)
+        layout.addWidget(self._serialCombobox,1,2,1,4)
+        layout.addWidget(self._connectButton,1,0,1,2)
+        layout.addWidget(self._targetPressureLabel,2,0,1,2)
+        layout.addWidget(self._targetPressureLineEdit,2,2,1,4)
+        layout.addWidget(self._targetNodeComboBox,3,2,1,4)
+        layout.addWidget(self._targetSetButton,3,0,1,2)
+        layout.addWidget(self._rawLineEdit, 4, 2, 1, 4)
+        layout.addWidget(self._sendRawButton, 4, 0, 1, 2)
 
         layout.setHorizontalSpacing(12)
         layout.setVerticalSpacing(10)
@@ -84,6 +93,28 @@ class MainWindow(QMainWindow):
         self._collectDataTimer.timeout.connect(self.update_data)
         self._collectDataTimer.start(100)
 
+    def onSendRaw(self):
+        if self.serialPort is not None:
+            text = self._rawLineEdit.text().strip()
+            if not text:
+                return
+            cleaned = text.replace("0x", "").replace(" ", "")
+            if len(cleaned) % 2 != 0:
+                print("Hex string length must be even.")
+                return
+            try:
+                raw = bytes.fromhex(cleaned)
+            except ValueError as e:
+                QMessageBox.critical(self,"Error","Input string is invalid",QMessageBox.Ok)
+                self._rawLineEdit.clear()
+                return
+
+            try:
+                self.serialPort.write(raw)
+                self.serialPort.flush()
+                print(f"Sent raw: {raw.hex().upper()}")
+            except Exception as e:
+                QMessageBox.critical(self,"Error","Fail to send data",QMessageBox.Ok)
     def update_data(self):
         """
         Update status on graph with the serial data available
@@ -133,17 +164,22 @@ class MainWindow(QMainWindow):
         """
         if self._connectButton.text() == "🔌 Connect":
             try:
-                self.serialPort = serial.Serial(f"{self._serialCombobox.currentText()[:4]}",115200, timeout=1)
-                self._connectButton.setText("❌ Disconnect")
+                if self._serialCombobox.count() > 0:
+                    self.serialPort = serial.Serial(f"{self._serialCombobox.currentText()[:4]}",115200, timeout=1)
+                    self._connectButton.setText("❌ Disconnect")
+                else:
+                    QMessageBox.critical(self,"Error","No port available",QMessageBox.Ok)
+                    return
             except Exception as e:
                 return
             self._connectButton.setText("❌ Disconnect")
+            self._sendRawButton.setEnabled(True)
         else:
             self._connectButton.setText("🔌 Connect")
             self.serialPort.flush()
             self.serialPort.close()
+            self._sendRawButton.setEnabled(False)
             self.serialPort = None
-            self._targetPressureList.clear()
 
     def onTargetButton(self):
         """
@@ -153,12 +189,11 @@ class MainWindow(QMainWindow):
             if self.serialPort is not None:
                 node_id = self._targetNodeComboBox.currentIndex() + 1
                 target_pressure = float(self._targetPressureLineEdit.text())
-                self._targetPressureList[node_id] = target_pressure
                 command = protocol_parser.set_target_pressure(target_pressure,node_id)
                 self.serialPort.write(command)
                 self._graphManager.pressureInformationUpdate(node_id,QDateTime.currentDateTime(),-1.0,target_pressure,-1.0)
                 self.serialPort.flush()
-                print(command.hex())
+                # print(command.hex())
         except Exception as e:
             print(e)
 
