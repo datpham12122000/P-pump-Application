@@ -62,6 +62,11 @@ main_window = """
         QMenu::item:disabled {
             color: #777;
         }
+        QMessageBox {
+            background-color: #2e2e2e;
+            color: #f0f0f0;
+            font-size: 12px;
+        }
         """
 graph_dialog_style_sheet = """
         QDialog {

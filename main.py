@@ -100,7 +100,8 @@ class MainWindow(QMainWindow):
                 return
             cleaned = text.replace("0x", "").replace(" ", "")
             if len(cleaned) % 2 != 0:
-                print("Hex string length must be even.")
+                QMessageBox.critical(self,"Error","Hex string length must be even",QMessageBox.Ok)
+                self._rawLineEdit.clear()
                 return
             try:
                 raw = bytes.fromhex(cleaned)
@@ -112,7 +113,7 @@ class MainWindow(QMainWindow):
             try:
                 self.serialPort.write(raw)
                 self.serialPort.flush()
-                print(f"Sent raw: {raw.hex().upper()}")
+                # print(f"Sent raw: {raw.hex().upper()}")
             except Exception as e:
                 QMessageBox.critical(self,"Error","Fail to send data",QMessageBox.Ok)
     def update_data(self):
@@ -122,16 +123,22 @@ class MainWindow(QMainWindow):
         if self.serialPort == None:
             return
         now = QDateTime.currentDateTime()
-        if self.serialPort.in_waiting >= protocol_parser.default_frame_length:
-            byte = self.serialPort.read(protocol_parser.default_frame_length)
-            frame_information = protocol_parser.get_data_from_frame(byte)
-            if frame_information[0] == "AtmospherePressure":
-                ...
-            elif frame_information[0] == "SupplyPressure":
-                for i in range (1,17):
-                    self._graphManager.pressureInformationUpdate(i,now,frame_information[1],-1.0,-1.0)
-            elif frame_information[0] == "NodePressure":
-                self._graphManager.pressureInformationUpdate(frame_information[1],now,-1.0,-1.0,frame_information[2])
+        try:
+            if self.serialPort.in_waiting >= protocol_parser.default_frame_length:
+                byte = self.serialPort.read(protocol_parser.default_frame_length)
+                frame_information = protocol_parser.get_data_from_frame(byte)
+                if frame_information[0] == "AtmospherePressure":
+                    ...
+                elif frame_information[0] == "SupplyPressure":
+                    for i in range (1,17):
+                        self._graphManager.pressureInformationUpdate(i,now,frame_information[1],-1.0,-1.0)
+                elif frame_information[0] == "NodePressure":
+                    self._graphManager.pressureInformationUpdate(frame_information[1],now,-1.0,-1.0,frame_information[2])
+        except:
+            QMessageBox.critical(self,"Error","Can not access serial port!!",QMessageBox.Ok)
+            self.serialPort = None
+            self.onListSerialPort()
+            self._connectButton.setText("🔌 Connect")
 
     def onShowGraphButtonClicked(self):
         """
