@@ -193,9 +193,8 @@ class MainWindow(QMainWindow):
                 self.serialPort.write(command)
                 self._graphManager.pressureInformationUpdate(node_id,QDateTime.currentDateTime(),-1.0,target_pressure,-1.0)
                 self.serialPort.flush()
-                # print(command.hex())
         except Exception as e:
-            print(e)
+            QMessageBox.critical(self,"Error",f"Fail to send target pressure to node",QMessageBox.Ok)
 
     def onOpenLog(self):
         """

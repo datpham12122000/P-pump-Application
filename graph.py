@@ -11,6 +11,7 @@ from PySide6.QtCore import (Qt, QDateTime, Slot,QTimer,
                             Signal)
 import csv
 import style_sheet
+import datetime
 
 class CustomChartView(QChartView):
     """
@@ -511,7 +512,7 @@ class GraphDialog(QDialog):
 
     def save_logging_data(self) -> None:
         try:
-            with open(f"{self.graph_name}.csv",'a') as csvfile:
+            with open(f"{QDateTime.currentDateTime().toString("yyyy-MM-dd_HH-mm-ss")}_{self.graph_name}.csv",'a') as csvfile:
                 csv_writer = csv.writer(csvfile)
                 csv_writer.writerows(self._logdata)
             self._logdata.clear()
