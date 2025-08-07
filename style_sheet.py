@@ -91,7 +91,9 @@ graph_dialog_style_sheet = """
         }
         QPushButton:pressed { background: #2f5fb8; }
         QCheckBox { padding: 2px; }
-        QLabel { font-size: 12px; }
+        QLabel { font-size: 25px; 
+        font-weight: bold
+        }
         QLabel, QCheckBox {
             color: white;
             font-size: 12px;
